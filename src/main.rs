@@ -3,9 +3,23 @@ use std::time::Duration;
 use bevy::input::common_conditions::input_just_pressed;
 use bevy::prelude::*;
 
+use bevy::render::RenderPlugin;
+use bevy::render::settings::Backends;
+use bevy::render::settings::RenderCreation;
+use bevy::render::settings::WgpuSettings;
+
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest())) //prevents blurry sprites
+        .add_plugins(DefaultPlugins
+            .set(ImagePlugin::default_nearest()) //prevents blurry sprites
+            .set(RenderPlugin {
+                render_creation: RenderCreation::Automatic(WgpuSettings {
+                    backends: Some(Backends::DX12),
+                    ..default()
+                }),
+                ..default()
+            })
+        )
         .add_systems(Startup, setup)
         .add_systems(Update, execute_animations)
         .add_systems(
@@ -47,7 +61,7 @@ impl AnimationConfig {
     }
 
     fn timer_from_fps(fps: u8) -> Timer {
-        Timer::new(Duration::from_secs_f32(1.0 / fps as f32)), TimerMode::Once)
+        Timer::new(Duration::from_secs_f32(1.0 / (fps as f32)), TimerMode::Once)
     }
 }
 
@@ -94,9 +108,60 @@ fn setup(
     let texture = asset_server.load("characters/chars.png");
 
     // the sprite sheet has 72 sprites arranged in a grid, and they're all 14px x 18px
-    let layout = TextureAtlasLayout::from_grid(UVec2::new(14, 18), 18, 4, offset=UVec2::new(16,180)); 
-    commands.spawn(SpriteBundle {
-        texture: asset_server.load("characters/chars.png"),
+    let layout = TextureAtlasLayout::from_grid(UVec2::new(14, 18), 18, 4, Some(UVec2::new(2,0)), Some(UVec2::new(17, 180))); 
+    let texture_atlas_layout  = texture_atlas_layouts.add(layout);
+
+    // the first (left-hand) sprite runs at 10 FPS
+    let animation_config_l = AnimationConfig::new(0,2,10);
+
+    // create the first(left-hand) sprite
+    commands.spawn((
+        SpriteBundle {
+            transform: Transform::from_scale(Vec3::splat(6.0))
+                .with_translation(Vec3::new(-50.0, 0.0, 0.0)),
+            texture: texture.clone(),
+            ..default()
+        },
+        TextureAtlas {
+            layout: texture_atlas_layout.clone(),
+            index: animation_config_l.first_sprite_index,
+        },
+        LeftSprite,
+        animation_config_l,
+    ));
+
+    // the second(right-hand) sprite runs at 20 FPS
+    let animation_config_r = AnimationConfig::new(3, 5, 20);
+
+    // create the second (right-hand) sprite
+    commands.spawn((
+        SpriteBundle {
+            transform: Transform::from_scale(Vec3::splat(6.0))
+                .with_translation(Vec3::new(50.0, 0.0, 0.0)),
+            texture: texture.clone(),
+            ..default()
+        },
+        TextureAtlas {
+            layout: texture_atlas_layout.clone(),
+            index: animation_config_r.first_sprite_index,
+        },
+        RightSprite,
+        animation_config_r,
+    ));
+
+    // create a minimal UI explaining how to interact with the example
+    commands.spawn(TextBundle {
+        text: Text::from_section(
+            "Left Arrow Key: Animate Left Sprite\nRight Arrow Key: Animate Right Sprite",
+            TextStyle::default(),
+        ),
+        style: Style {
+            position_type: PositionType::Absolute,
+            top: Val::Px(12.0),
+            left: Val::Px(12.0),
+            ..default()
+        },
         ..default()
     });
 }
+
